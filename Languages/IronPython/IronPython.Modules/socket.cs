@@ -84,7 +84,6 @@ namespace IronPython.Modules {
             + " - s.accept(), s.connect(), and s.connect_ex() do not support timeouts.\n"
             + " - Timeouts in s.sendall() don't work correctly.\n"
             + " - s.dup() is not implemented.\n"
-            + " - getservbyname() and getservbyport() are not implemented.\n"
             + " - SSL support is not implemented."
             + "\n"
             + "An Extra IronPython-specific function is exposed only if the clr module is\n"
@@ -423,11 +422,18 @@ namespace IronPython.Modules {
                 )]
             public string recv(int maxBytes, [DefaultParameterValue(0)] int flags) {
                 int bytesRead;
+                if (maxBytes < 0)
+                    throw PythonOps.ValueError("negative buffersize in recv");
                 byte[] buffer = new byte[maxBytes];
                 try {
                     bytesRead = _socket.Receive(buffer, (SocketFlags)flags);
                 } catch (Exception e) {
-                    throw MakeException(_context, e);
+                    if (_socket.SendTimeout == 0){
+                        var s = new SocketException(10057);
+                        throw PythonExceptions.CreateThrowable(error(_context), 10057, s.Message);
+                    }
+                    else
+                        throw MakeException(_context, e);
                 }
                 return PythonOps.MakeString(buffer, bytesRead);
             }
@@ -468,7 +474,13 @@ namespace IronPython.Modules {
                 try {
                     bytesRead = _socket.Receive(byteBuffer, (SocketFlags)flags);
                 } catch (Exception e) {
-                    throw MakeException(_context, e);
+                    if (_socket.SendTimeout == 0){
+                        var s = new SocketException(10057);
+                        throw PythonExceptions.CreateThrowable(error(_context), 10057, s.Message);
+                    }
+                    else
+                        throw MakeException(_context, e);
+                    
                 }
 
                 buffer.FromStream(new MemoryStream(byteBuffer), 0);
@@ -489,7 +501,13 @@ namespace IronPython.Modules {
                 try {
                     bytesRead = _socket.Receive(byteBuffer, (SocketFlags)flags);
                 } catch (Exception e) {
-                    throw MakeException(_context, e);
+                    if (_socket.SendTimeout == 0){
+                        var s = new SocketException(10057);
+                        throw PythonExceptions.CreateThrowable(error(_context), 10057, s.Message);
+                    }
+                    else
+                        throw MakeException(_context, e);
+
                 }
 
                 for (int i = 0; i < bytesRead; i++) {
@@ -516,7 +534,13 @@ namespace IronPython.Modules {
                 try {
                     bytesRead = _socket.ReceiveFrom(buffer, (SocketFlags)flags, ref remoteEP);
                 } catch (Exception e) {
-                    throw MakeException(_context, e);
+                    if (_socket.SendTimeout == 0){
+                        var s = new SocketException(10022);
+                        throw PythonExceptions.CreateThrowable(error(_context), 10022, s.Message);
+                    }
+                    else
+                        throw MakeException(_context, e);
+
                 }
 
                 string data = PythonOps.MakeString(buffer, bytesRead);
@@ -553,7 +577,13 @@ namespace IronPython.Modules {
                 try {
                     bytesRead = _socket.ReceiveFrom(byteBuffer, (SocketFlags)flags, ref remoteEP);
                 } catch (Exception e) {
-                    throw MakeException(_context, e);
+                    if (_socket.SendTimeout == 0){
+                        var s = new SocketException(10022);
+                        throw PythonExceptions.CreateThrowable(error(_context), 10022, s.Message);
+                    }
+                    else
+                        throw MakeException(_context, e);
+
                 }
 
                 buffer.FromStream(new MemoryStream(byteBuffer), 0);
@@ -573,7 +603,13 @@ namespace IronPython.Modules {
                 try {
                     bytesRead = _socket.ReceiveFrom(byteBuffer, (SocketFlags)flags, ref remoteEP);
                 } catch (Exception e) {
-                    throw MakeException(_context, e);
+                    if (_socket.SendTimeout == 0){
+                        var s = new SocketException(10022);
+                        throw PythonExceptions.CreateThrowable(error(_context), 10022, s.Message);
+                    }
+                    else
+                        throw MakeException(_context, e);
+
                 }
 
                 for (int i = 0; i < byteBuffer.Length; i++) {
@@ -785,7 +821,7 @@ namespace IronPython.Modules {
                         double seconds;
                         seconds = Converter.ConvertToDouble(timeout);
                         if (seconds < 0) {
-                            throw PythonOps.TypeError("a non-negative float is required");
+                            throw PythonOps.ValueError("Timeout value out of range");
                         }
                         _socket.Blocking = seconds > 0; // 0 timeout means non-blocking mode
                         _socket.SendTimeout = (int)(seconds * MillisecondsPerSecond);
@@ -1060,13 +1096,21 @@ namespace IronPython.Modules {
                 numericPort = ((Extensible<int>)port).Value;
             } else if (port is string) {
                 if (!Int32.TryParse((string)port, out numericPort)) {
-                    // TODO: also should consult GetServiceByName                    
-                    throw PythonExceptions.CreateThrowable(gaierror(context), "getaddrinfo failed");
+                    try{ 
+                        port = getservbyname(context,(string)port,null);
+                    }
+                    catch{
+                        throw PythonExceptions.CreateThrowable(gaierror(context), "getaddrinfo failed");
+                    }
                 }
             } else if (port is ExtensibleString) {
                 if (!Int32.TryParse(((ExtensibleString)port).Value, out numericPort)) {
-                    // TODO: also should consult GetServiceByName                    
-                    throw PythonExceptions.CreateThrowable(gaierror(context), "getaddrinfo failed");
+                    try{
+                        port = getservbyname(context, (string)port, null);
+                    }
+                    catch{
+                        throw PythonExceptions.CreateThrowable(gaierror(context), "getaddrinfo failed");
+                    }
                 }
             } else {
                 throw PythonExceptions.CreateThrowable(gaierror(context), "getaddrinfo failed");
@@ -1087,6 +1131,9 @@ namespace IronPython.Modules {
 
             // Again, we just validate, but don't actually use protocolType
             Enum.ToObject(typeof(ProtocolType), proto);
+
+            if (host == null)
+                host = "localhost";
 
             IPAddress[] ips = HostToAddresses(context, host, addressFamily);
 
@@ -1253,10 +1300,6 @@ namespace IronPython.Modules {
                 throw PythonOps.TypeError("socket address must be a 2-tuple (IPv4 or IPv6) or 4-tuple (IPv6)");
             }
 
-            if ((flags & (int)NI_NUMERICSERV) == 0) {
-                throw PythonOps.NotImplementedError("getnameinfo() required the NI_NUMERICSERV flag (see docstring)");
-            }
-
             string host = Converter.ConvertToString(socketAddr[0]);
             if (host == null) throw PythonOps.TypeError("argument 1 must be string");
             int port = 0;
@@ -1315,8 +1358,18 @@ namespace IronPython.Modules {
             }
 
             // Port
-            // We don't branch on NI_NUMERICSERV here since we throw above if it's not set
-            resultPort = port.ToString();
+            if ((flags & (int)NI_NUMERICSERV) == 0) {
+                //call the servbyport to translate port if not just use the port.ToString as the result
+                try{
+                    resultPort = getservbyport(context, port,null);
+                }
+                catch{
+                    resultPort = port.ToString();
+                }
+                flags = flags | (int)NI_NUMERICSERV;
+            }
+            else
+                resultPort = port.ToString();
 
             return PythonTuple.MakeTuple(resultHost, resultPort);
         }
@@ -1353,23 +1406,105 @@ namespace IronPython.Modules {
         }
 
         [Documentation("getservbyname(service_name[, protocol_name]) -> port\n\n"
-            + "Not implemented."
-            //+ "Given a service name (e.g. 'domain') return the associated protocol number (e.g.\n"
-            //+ "53). The protocol name (if specified) must be either 'tcp' or 'udp'."
+            + "Return a port number from a service name and protocol name.\n"
+            + "The optional protocol name, if given, should be 'tcp' or 'udp',\n"
+            + "otherwise any protocol will match."
             )]
-        public static int getservbyname(string serviceName, [DefaultParameterValue(null)] string protocolName) {
-            // !!! .NET networking libraries don't support this, so we don't either
-            throw PythonOps.NotImplementedError("name to service conversion not supported");
+        public static int getservbyname(CodeContext/*!*/ context, string serviceName, [DefaultParameterValue(null)] string protocolName)
+        {
+            if(protocolName != null){ 
+                protocolName = protocolName.ToLower();
+                if(protocolName != "udp" && protocolName != "tcp")
+                    throw PythonExceptions.CreateThrowable(error(context), "service/proto not found");
+            }
+    
+            switch (serviceName.ToLower()){
+                case "echo": return 7;
+                case "daytime": return 13;
+                case "ftp-data": return 20;
+                case "ftp": if (protocolName == null || protocolName == "tcp") return 21; else goto default;
+                case "ssh": return 22;
+                case "telnet": return 23;
+                case "smtp": if (protocolName == null || protocolName == "tcp") return 25; else goto default;
+                case "time": return 37;
+                case "rlp": return 39;
+                case "nameserver": return 42;
+                case "nicname": if (protocolName == null || protocolName == "tcp") return 43; else goto default;
+                case "domain": return 53;
+                case "bootps": if (protocolName == null || protocolName == "udp") return 67; else goto default;
+                case "bootpc": if (protocolName == null || protocolName == "udp") return 68; else goto default;
+                case "tftp": if (protocolName == null || protocolName == "udp") return 69; else goto default;
+                case "http": if (protocolName == null || protocolName == "tcp") return 80; else goto default;
+                case "kerberos": return 88;
+                case "rtelnet": if (protocolName == null || protocolName == "tcp") return 107; else goto default;
+                case "pop2": if (protocolName == null || protocolName == "tcp") return 109; else goto default;
+                case "pop3": if (protocolName == null || protocolName == "tcp") return 110; else goto default;
+                case "nntp": if (protocolName == null || protocolName == "tcp") return 119; else goto default;
+                case "ntp": if (protocolName == null || protocolName == "udp") return 123; else goto default;
+                case "imap": if (protocolName == null || protocolName == "tcp") return 143; else goto default;
+                case "snmp": if (protocolName == null || protocolName == "udp") return 161; else goto default;
+                case "snmptrap": if (protocolName == null || protocolName == "udp") return 162; else goto default;
+                case "ldap": if (protocolName == null || protocolName == "tcp") return 389; else goto default;
+                case "https": if (protocolName == null || protocolName == "tcp") return 430; else goto default;
+                case "dhcpv6-client": return 546;
+                case "dhcpv6-server": return 547;
+                case "rtsp": return 554;
+                default:
+                    throw PythonExceptions.CreateThrowable(error(context), "service/proto not found");
+            }
         }
 
         [Documentation("getservbyport(port[, protocol_name]) -> service_name\n\n"
-            + "Not implemented."
-            //+ "Given a port number (e.g. 53), return the associated protocol name (e.g.\n"
-            //+ "'domain'). The protocol name (if specified) must be either 'tcp' or 'udp'."
+            + "Return a service name from a port number and protocol name.\n"
+            + "The optional protocol name, if given, should be 'tcp' or 'udp',\n"
+            + "otherwise any protocol will match."
             )]
-        public static string getservbyport(int port, [DefaultParameterValue(null)] string protocolName) {
-            // !!! .NET networking libraries don't support this, so we don't either
-            throw PythonOps.NotImplementedError("service to name conversion not supported");
+        public static string getservbyport(CodeContext/*!*/ context, int port, [DefaultParameterValue(null)] string protocolName) {
+
+            if (port < 0 || port > 65535)
+                throw PythonOps.OverflowError("getservbyport: port must be 0-65535.");
+
+            if (protocolName != null)
+            { 
+                protocolName = protocolName.ToLower();
+                if (protocolName != "udp" && protocolName != "tcp")
+                    throw PythonExceptions.CreateThrowable(error(context), "port/proto not found");
+            }
+            switch (port)
+            {
+                case 7: return "echo";
+                case 13: return "daytime";
+                case 20: return "ftp-data";
+                case 21: if (protocolName == null || protocolName == "tcp") return "ftp"; else goto default;
+                case 22: return "ssh";
+                case 23: return "telnet";
+                case 25: if (protocolName == null || protocolName == "tcp") return "smtp"; else goto default;
+                case 37: return "time";
+                case 39: return "rlp";
+                case 42: return "nameserver";
+                case 43: if (protocolName == null || protocolName == "tcp") return "nicname"; else goto default;
+                case 53: return "domain";
+                case 67: if (protocolName == null || protocolName == "udp") return "bootps"; else goto default;
+                case 68: if (protocolName == null || protocolName == "udp") return "bootpc"; else goto default;
+                case 69: if (protocolName == null || protocolName == "udp") return "tftp"; else goto default;
+                case 80: if (protocolName == null || protocolName == "tcp") return "http"; else goto default;
+                case 88: return "kerberos";
+                case 107: if (protocolName == null || protocolName == "tcp") return "rtelnet"; else goto default;
+                case 109: if (protocolName == null || protocolName == "tcp") return "pop2"; else goto default;
+                case 110: if (protocolName == null || protocolName == "tcp") return "pop3"; else goto default;
+                case 119: if (protocolName == null || protocolName == "tcp") return "nntp"; else goto default;
+                case 123: if (protocolName == null || protocolName == "udp") return "ntp"; else goto default;
+                case 143: if (protocolName == null || protocolName == "tcp") return "imap"; else goto default;
+                case 161: if (protocolName == null || protocolName == "udp") return "snmp"; else goto default;
+                case 162: if (protocolName == null || protocolName == "udp") return "snmptrap"; else goto default;
+                case 389: if (protocolName == null || protocolName == "tcp") return "ldap"; else goto default;
+                case 430: if (protocolName == null || protocolName == "tcp") return "https"; else goto default;
+                case 546: return "dhcpv6-client";
+                case 547: return "dhcpv6-server";
+                case 554: return "rtsp";
+                default:
+                    throw PythonExceptions.CreateThrowable(error(context), "port/proto not found");
+            }
         }
 
         [Documentation("ntohl(x) -> integer\n\nConvert a 32-bit integer from network byte order to host byte order.")]
