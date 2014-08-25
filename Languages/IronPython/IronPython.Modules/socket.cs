@@ -516,6 +516,39 @@ namespace IronPython.Modules {
                 return bytesRead;
             }
 
+            [Documentation("recv_into(bytearray, [nbytes[, flags]]) -> nbytes_read\n\n"
+                + "A version of recv() that stores its data into a bytearray rather than creating\n"
+                + "a new string.  Receive up to buffersize bytes from the socket.  If buffersize\n"
+                + "is not specified (or 0), receive up to the size available in the given buffer.\n\n"
+                + "See recv() for documentation about the flags.\n"
+                )]
+            public int recv_into(MemoryView buffer, [DefaultParameterValue(0)]int nbytes, [DefaultParameterValue(0)]int flags){
+                int bytesRead;
+                byte[] byteBuffer = buffer.tobytes().ToByteArray();
+                try
+                {
+                    bytesRead = _socket.Receive(byteBuffer, (SocketFlags)flags);
+                }
+                catch (Exception e)
+                {
+                    if (_socket.SendTimeout == 0)
+                    {
+                        var s = new SocketException(10057);
+                        throw PythonExceptions.CreateThrowable(error(_context), 10057, s.Message);
+                    }
+                    else
+                        throw MakeException(_context, e);
+
+                }
+
+                for (int i = 0; i < bytesRead; i++)
+                {
+                    buffer[i] = byteBuffer[i];
+                }
+                return bytesRead;
+
+            }
+
 
             [Documentation("recvfrom(bufsize[, flags]) -> (string, address)\n\n"
                 + "Receive data from the socket, up to bufsize bytes. string is the data\n"
@@ -587,6 +620,40 @@ namespace IronPython.Modules {
                 }
 
                 buffer.FromStream(new MemoryStream(byteBuffer), 0);
+                PythonTuple remoteAddress = EndPointToTuple((IPEndPoint)remoteEP);
+                return PythonTuple.MakeTuple(bytesRead, remoteAddress);
+            }
+
+            [Documentation("recvfrom_into(buffer[, nbytes[, flags]]) -> (nbytes, address info)\n\n"
+               + "Like recv_into(buffer[, nbytes[, flags]]) but also return the sender's address info.\n"
+               )]
+            public PythonTuple recvfrom_into(MemoryView buffer, [DefaultParameterValue(0)]int nbytes, [DefaultParameterValue(0)]int flags){
+                
+                int bytesRead;
+                byte[] byteBuffer = buffer.tobytes().ToByteArray();
+                IPEndPoint remoteIPEP = new IPEndPoint(IPAddress.Any, 0);
+                EndPoint remoteEP = remoteIPEP;
+
+                try
+                {
+                    bytesRead = _socket.ReceiveFrom(byteBuffer, (SocketFlags)flags, ref remoteEP);
+                }
+                catch (Exception e)
+                {
+                    if (_socket.SendTimeout == 0)
+                    {
+                        var s = new SocketException(10022);
+                        throw PythonExceptions.CreateThrowable(error(_context), 10022, s.Message);
+                    }
+                    else
+                        throw MakeException(_context, e);
+
+                }
+
+                for (int i = 0; i < byteBuffer.Length; i++)
+                {
+                    buffer[i] = byteBuffer[i];
+                }
                 PythonTuple remoteAddress = EndPointToTuple((IPEndPoint)remoteEP);
                 return PythonTuple.MakeTuple(bytesRead, remoteAddress);
             }
@@ -913,8 +980,36 @@ namespace IronPython.Modules {
                 get { return (int)_socket.ProtocolType; }
             }
 
-            public int ioctl(BigInteger cmd, int option) {
-                return _socket.IOControl((IOControlCode)(long)cmd, BitConverter.GetBytes(option), null);
+            public int ioctl(BigInteger cmd, object option)
+            {
+                if(cmd == SIO_KEEPALIVE_VALS){ 
+                    if (!(option is PythonTuple))
+                        throw PythonOps.TypeError("option must be 3-item sequence, not int");
+                    var tOption = (PythonTuple)option;
+                    if (tOption.Count != 3)
+                        throw PythonOps.TypeError(string.Format("option must be sequence of length 3, not {0}", tOption.Count));
+                    //(onoff, timeout, interval)
+                    if ((!(tOption[0] is int)) && (!(tOption[1] is int)) && (!(tOption[2] is int)))
+                        throw PythonOps.TypeError("option integer required");
+
+                    int onoff = (int)tOption[0];
+                    int timeout = (int)tOption[1];
+                    int interval = (int)tOption[2];
+                    int size = sizeof(UInt32);
+                    byte[] inArray = new byte[size * 3];
+                    Array.Copy(BitConverter.GetBytes(onoff), 0, inArray, 0, size);
+                    Array.Copy(BitConverter.GetBytes(timeout), 0, inArray, size, size);
+                    Array.Copy(BitConverter.GetBytes(size), 0, inArray, size*2, size);
+                    return _socket.IOControl((IOControlCode)(long)cmd, inArray, null);
+                }
+                else if(cmd == SIO_RCVALL){
+                    if (!(option is int))
+                        throw PythonOps.TypeError("option integer required");
+
+                    return _socket.IOControl((IOControlCode)(long)cmd, BitConverter.GetBytes((int)option), null);
+                }
+                else
+                    throw PythonOps.ValueError(string.Format("invalid ioctl command {0}", cmd));
             }
 
             public override string ToString() {
@@ -1417,6 +1512,13 @@ namespace IronPython.Modules {
                 if(protocolName != "udp" && protocolName != "tcp")
                     throw PythonExceptions.CreateThrowable(error(context), "service/proto not found");
             }
+
+            // try the pinvoke call if it fails fall back to hard coded swtich statement
+            try {
+                var port = SocketUtil.GetServiceByName(serviceName, protocolName);
+            }
+            catch{}
+            
     
             switch (serviceName.ToLower()){
                 case "echo": return 7;
@@ -1464,12 +1566,18 @@ namespace IronPython.Modules {
             if (port < 0 || port > 65535)
                 throw PythonOps.OverflowError("getservbyport: port must be 0-65535.");
 
-            if (protocolName != null)
-            { 
+            if (protocolName != null){ 
                 protocolName = protocolName.ToLower();
                 if (protocolName != "udp" && protocolName != "tcp")
                     throw PythonExceptions.CreateThrowable(error(context), "port/proto not found");
             }
+
+            // try the pinvoke call if it fails fall back to hard coded swtich statement
+            try{
+                return SocketUtil.GetServiceByPort((ushort)port, protocolName);
+            }
+            catch{ }
+
             switch (port)
             {
                 case 7: return "echo";
@@ -1806,6 +1914,7 @@ namespace IronPython.Modules {
 
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Security", "CA2104:DoNotDeclareReadOnlyMutableReferenceTypes")]
         public static readonly BigInteger SIO_RCVALL = (long)IOControlCode.ReceiveAll;
+        public static readonly BigInteger SIO_KEEPALIVE_VALS = (long)IOControlCode.KeepAliveValues;
         public const int RCVALL_ON = 1;
         public const int RCVALL_OFF = 0;
         public const int RCVALL_SOCKETLEVELONLY = 2;
@@ -2586,5 +2695,169 @@ namespace IronPython.Modules {
             }
         }
     }
+
+
+    internal class SocketUtilException : Exception
+    {
+
+        public SocketUtilException()
+        {
+        }
+
+        public SocketUtilException(string message)
+            : base(message)
+        {
+        }
+
+        public SocketUtilException(string message, Exception inner)
+            : base(message, inner)
+        {
+        }
+
+    }
+
+    // based on http://stackoverflow.com/questions/13246099/using-c-sharp-to-reference-a-port-number-to-service-name
+    // for the Linux Mono version and http://www.pinvoke.net/ for dllimports for winsock libraries
+    internal static class SocketUtil
+    {
+
+        [StructLayoutAttribute(LayoutKind.Sequential)]
+        public struct servent
+        {
+            public string s_name;
+            public IntPtr s_aliases;
+            public ushort s_port;
+            public string s_proto;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct WSAData
+        {
+            public short wVersion;
+            public short wHighVersion;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 257)]
+            public string szDescription;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 129)]
+            public string szSystemStatus;
+            public short iMaxSockets;
+            public short iMaxUdpDg;
+            public int lpVendorInfo;
+        }
+
+
+        [DllImport("libc", SetLastError = true, CharSet = CharSet.Ansi, EntryPoint = "getservbyname")]
+        private static extern IntPtr getservbyname_linux(string name, string proto);
+        [DllImport("libc", SetLastError = true, CharSet = CharSet.Ansi, EntryPoint = "getservbyport")]
+        private static extern IntPtr getservbyport_linux(ushort port, string proto);
+
+
+        [DllImport("ws2_32.dll", SetLastError=true)]
+        static extern Int32 WSAStartup(Int16 wVersionRequested, out WSAData wsaData);
+        [DllImport("ws2_32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+        private static extern IntPtr getservbyname(string name, string proto);
+        [DllImport("ws2_32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+        private static extern IntPtr getservbyport(ushort port, string proto);
+        [DllImport("Ws2_32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        private static extern Int32 WSAGetLastError();
+        [DllImport("ws2_32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        static extern Int32 WSACleanup();
+
+        public static string GetServiceByPortWindows(ushort port, string protocol)
+        {
+            WSAData dummy = new WSAData();
+            int successful = WSAStartup(0x0202, out dummy);
+            if (successful != 0)
+                throw new SocketUtilException(string.Format("Could not resolve service for port {0}", port));
+
+            try {
+                var netport = unchecked((ushort)IPAddress.HostToNetworkOrder(unchecked((short)port)));
+                var result = getservbyport(netport, protocol);
+                if (IntPtr.Zero == result)
+                    throw new SocketUtilException(string.Format("Could not resolve service for port {0}", port));
+
+                var srvent = (servent)Marshal.PtrToStructure(result, typeof(servent));
+                return srvent.s_name;
+            }
+            finally{
+                // make sure I clean up don't have to worry about Winsock clean and keeping state
+                WSACleanup();
+            }
+        }
+
+        public static string GetServiceByPortNonWindows(ushort port, string protocol)
+        {
+            var netport = unchecked((ushort)IPAddress.HostToNetworkOrder(unchecked((short)port)));
+            var result = getservbyport(netport, protocol);
+            if (IntPtr.Zero == result)
+            {
+                throw new SocketUtilException(
+                    string.Format("Could not resolve service for port {0}", port));
+            }
+            var srvent = (servent)Marshal.PtrToStructure(result, typeof(servent));
+            return srvent.s_name;
+        }
+
+        public static string GetServiceByPort(ushort port, string protocol)
+        {
+              if (Environment.OSVersion.Platform == PlatformID.Unix ||Environment.OSVersion.Platform == PlatformID.MacOSX)
+                return GetServiceByPortNonWindows(port,protocol);
+              else
+                return GetServiceByPortWindows(port, protocol);
+        }
+
+
+        public static ushort GetServiceByNameWindows(string service, string protocol){
+
+            // Startup with version 2.2 the latest Winsock library
+            WSAData dummy = new WSAData();
+            int successful = WSAStartup(0x0202, out dummy);
+            if (successful != 0){
+                throw new SocketUtilException(
+                    string.Format("Could not resolve port for service {0}", service));
+            }
+            try{
+
+                var result = getservbyname(service, protocol);
+                if (IntPtr.Zero == result)
+                    throw new SocketUtilException(string.Format("Could not resolve port for service {0}", service));
+
+                var srvent = (servent)Marshal.PtrToStructure(result, typeof(servent));
+                var hostport = IPAddress.NetworkToHostOrder(unchecked((short)srvent.s_port));
+                return unchecked((ushort)hostport);
+            }
+            finally {
+                // make sure I clean up don't have to worry about Winsock clean and keeping state
+                WSACleanup();
+            }
+
+        }
+
+        public static ushort GetServiceByNameNonWindows(string service, string protocol)
+        {
+
+            var result = getservbyname(service, protocol);
+            if (IntPtr.Zero == result)
+            {
+                throw new SocketUtilException(
+                    string.Format("Could not resolve port for service {0}", service));
+            }
+
+            var srvent = (servent)Marshal.PtrToStructure(result, typeof(servent));
+            var hostport = IPAddress.NetworkToHostOrder(unchecked((short)srvent.s_port));
+            return unchecked((ushort)hostport);
+
+        }
+        public static ushort GetServiceByName(string service, string protocol)
+        {
+            if (Environment.OSVersion.Platform == PlatformID.Unix || Environment.OSVersion.Platform == PlatformID.MacOSX)
+                return GetServiceByNameNonWindows(service, protocol);
+            else
+                return GetServiceByNameWindows(service, protocol);
+        }
+
+    }
 }
+
+
+
 #endif
