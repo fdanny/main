@@ -428,12 +428,7 @@ namespace IronPython.Modules {
                 try {
                     bytesRead = _socket.Receive(buffer, (SocketFlags)flags);
                 } catch (Exception e) {
-                    if (_socket.SendTimeout == 0){
-                        var s = new SocketException((int)SocketError.NotConnected);
-                        throw PythonExceptions.CreateThrowable(error(_context), (int)SocketError.NotConnected, s.Message);
-                    }
-                    else
-                        throw MakeException(_context, e);
+                    throw MakeRecvException(e, SocketError.NotConnected);
                 }
                 return PythonOps.MakeString(buffer, bytesRead);
             }
@@ -474,13 +469,7 @@ namespace IronPython.Modules {
                 try {
                     bytesRead = _socket.Receive(byteBuffer, (SocketFlags)flags);
                 } catch (Exception e) {
-                    if (_socket.SendTimeout == 0){
-                        var s = new SocketException((int)SocketError.NotConnected);
-                        throw PythonExceptions.CreateThrowable(error(_context), (int)SocketError.NotConnected, s.Message);
-                    }
-                    else
-                        throw MakeException(_context, e);
-                    
+                    throw MakeRecvException(e, SocketError.NotConnected);
                 }
 
                 buffer.FromStream(new MemoryStream(byteBuffer), 0);
@@ -501,13 +490,7 @@ namespace IronPython.Modules {
                 try {
                     bytesRead = _socket.Receive(byteBuffer, (SocketFlags)flags);
                 } catch (Exception e) {
-                    if (_socket.SendTimeout == 0){
-                        var s = new SocketException((int)SocketError.NotConnected);
-                        throw PythonExceptions.CreateThrowable(error(_context), (int)SocketError.NotConnected, s.Message);
-                    }
-                    else
-                        throw MakeException(_context, e);
-
+                    throw MakeRecvException(e, SocketError.NotConnected);
                 }
 
                 for (int i = 0; i < bytesRead; i++) {
@@ -550,7 +533,7 @@ namespace IronPython.Modules {
             }
 
 
-            public int recv_into(Object buffer, [DefaultParameterValue(0)]int nbytes, [DefaultParameterValue(0)]int flags){
+            public int recv_into(object buffer, [DefaultParameterValue(0)]int nbytes, [DefaultParameterValue(0)]int flags){
                 throw PythonOps.TypeError(string.Format("recv_into() argument 1 must be read-write buffer, not {0}",PythonOps.GetPythonTypeName(buffer)));
             }
 
@@ -572,13 +555,7 @@ namespace IronPython.Modules {
                 try {
                     bytesRead = _socket.ReceiveFrom(buffer, (SocketFlags)flags, ref remoteEP);
                 } catch (Exception e) {
-                    if (_socket.SendTimeout == 0){
-                        var s = new SocketException((int)SocketError.InvalidArgument);
-                        throw PythonExceptions.CreateThrowable(error(_context), (int)SocketError.InvalidArgument, s.Message);
-                    }
-                    else
-                        throw MakeException(_context, e);
-
+                    throw MakeRecvException(e, SocketError.InvalidArgument);
                 }
 
                 string data = PythonOps.MakeString(buffer, bytesRead);
@@ -615,13 +592,7 @@ namespace IronPython.Modules {
                 try {
                     bytesRead = _socket.ReceiveFrom(byteBuffer, (SocketFlags)flags, ref remoteEP);
                 } catch (Exception e) {
-                    if (_socket.SendTimeout == 0){
-                        var s = new SocketException((int)SocketError.InvalidArgument);
-                        throw PythonExceptions.CreateThrowable(error(_context), (int)SocketError.InvalidArgument, s.Message);
-                    }
-                    else
-                        throw MakeException(_context, e);
-
+                    throw MakeRecvException(e, SocketError.InvalidArgument);
                 }
 
                 buffer.FromStream(new MemoryStream(byteBuffer), 0);
@@ -643,13 +614,7 @@ namespace IronPython.Modules {
                     bytesRead = _socket.ReceiveFrom(byteBuffer, (SocketFlags)flags, ref remoteEP);
                 }
                 catch (Exception e) {
-                    if (_socket.SendTimeout == 0) {
-                        var s = new SocketException((int)SocketError.InvalidArgument);
-                        throw PythonExceptions.CreateThrowable(error(_context), (int)SocketError.InvalidArgument, s.Message);
-                    }
-                    else
-                        throw MakeException(_context, e);
-
+                    throw MakeRecvException(e, SocketError.InvalidArgument);
                 }
 
                 for (int i = 0; i < byteBuffer.Length; i++){
@@ -671,13 +636,7 @@ namespace IronPython.Modules {
                 try {
                     bytesRead = _socket.ReceiveFrom(byteBuffer, (SocketFlags)flags, ref remoteEP);
                 } catch (Exception e) {
-                    if (_socket.SendTimeout == 0){
-                        var s = new SocketException((int)SocketError.InvalidArgument);
-                        throw PythonExceptions.CreateThrowable(error(_context), (int)SocketError.InvalidArgument, s.Message);
-                    }
-                    else
-                        throw MakeException(_context, e);
-
+                    throw MakeRecvException(e, SocketError.InvalidArgument);
                 }
 
                 for (int i = 0; i < byteBuffer.Length; i++) {
@@ -687,7 +646,7 @@ namespace IronPython.Modules {
                 return PythonTuple.MakeTuple(bytesRead, remoteAddress);
             }
 
-            public PythonTuple recvfrom_into(Object buffer, [DefaultParameterValue(0)]int nbytes, [DefaultParameterValue(0)]int flags) {
+            public PythonTuple recvfrom_into(object buffer, [DefaultParameterValue(0)]int nbytes, [DefaultParameterValue(0)]int flags) {
                 throw PythonOps.TypeError(string.Format("recvfrom_into() argument 1 must be read-write buffer, not {0}", PythonOps.GetPythonTypeName(buffer)));
             }
 
@@ -703,6 +662,15 @@ namespace IronPython.Modules {
                 }
             }
 
+            private Exception MakeRecvException(Exception e, SocketError errorCode = SocketError.InvalidArgument) {
+                // on the socket recv throw a special socket error code when SendTimeout is zero
+                if (_socket.SendTimeout == 0) {
+                    var s = new SocketException((int)errorCode);
+                    return PythonExceptions.CreateThrowable(error(_context), (int)SocketError.InvalidArgument, s.Message);
+                }
+                else
+                    return MakeException(_context, e);
+            }
             [Documentation("send(string[, flags]) -> bytes_sent\n\n"
                 + "Send data to the remote socket. The socket must be connected to a remote\n"
                 + "socket (by calling either connect() or accept(). Returns the number of bytes\n"

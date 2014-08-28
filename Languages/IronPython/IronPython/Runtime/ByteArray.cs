@@ -793,12 +793,10 @@ namespace IronPython.Runtime {
            
             lock (this) {
                 if (table != null) {
-                    if (table.Count != 256)
-                    {
+                    if (table.Count != 256) {
                         throw PythonOps.ValueError("translation table must be 256 characters long");
                     }
-                    else if (Count == 0)
-                    {
+                    else if (Count == 0) {
                         return CopyThis();
                     }
                 }
@@ -812,7 +810,7 @@ namespace IronPython.Runtime {
             if (table == null && deletechars == null) {
                 throw PythonOps.TypeError("expected bytearray or bytes, got NoneType");
             }
-            else if (deletechars == null){
+            else if (deletechars == null) {
                 throw PythonOps.TypeError("expected bytes or bytearray, got None");
             }
             
