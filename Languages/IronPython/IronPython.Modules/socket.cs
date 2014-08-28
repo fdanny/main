@@ -429,8 +429,8 @@ namespace IronPython.Modules {
                     bytesRead = _socket.Receive(buffer, (SocketFlags)flags);
                 } catch (Exception e) {
                     if (_socket.SendTimeout == 0){
-                        var s = new SocketException(10057);
-                        throw PythonExceptions.CreateThrowable(error(_context), 10057, s.Message);
+                        var s = new SocketException((int)SocketError.NotConnected);
+                        throw PythonExceptions.CreateThrowable(error(_context), (int)SocketError.NotConnected, s.Message);
                     }
                     else
                         throw MakeException(_context, e);
@@ -475,8 +475,8 @@ namespace IronPython.Modules {
                     bytesRead = _socket.Receive(byteBuffer, (SocketFlags)flags);
                 } catch (Exception e) {
                     if (_socket.SendTimeout == 0){
-                        var s = new SocketException(10057);
-                        throw PythonExceptions.CreateThrowable(error(_context), 10057, s.Message);
+                        var s = new SocketException((int)SocketError.NotConnected);
+                        throw PythonExceptions.CreateThrowable(error(_context), (int)SocketError.NotConnected, s.Message);
                     }
                     else
                         throw MakeException(_context, e);
@@ -502,8 +502,8 @@ namespace IronPython.Modules {
                     bytesRead = _socket.Receive(byteBuffer, (SocketFlags)flags);
                 } catch (Exception e) {
                     if (_socket.SendTimeout == 0){
-                        var s = new SocketException(10057);
-                        throw PythonExceptions.CreateThrowable(error(_context), 10057, s.Message);
+                        var s = new SocketException((int)SocketError.NotConnected);
+                        throw PythonExceptions.CreateThrowable(error(_context), (int)SocketError.NotConnected, s.Message);
                     }
                     else
                         throw MakeException(_context, e);
@@ -516,7 +516,7 @@ namespace IronPython.Modules {
                 return bytesRead;
             }
 
-            [Documentation("recv_into(bytearray, [nbytes[, flags]]) -> nbytes_read\n\n"
+            [Documentation("recv_into(memoryview, [nbytes[, flags]]) -> nbytes_read\n\n"
                 + "A version of recv() that stores its data into a bytearray rather than creating\n"
                 + "a new string.  Receive up to buffersize bytes from the socket.  If buffersize\n"
                 + "is not specified (or 0), receive up to the size available in the given buffer.\n\n"
@@ -533,8 +533,8 @@ namespace IronPython.Modules {
                 {
                     if (_socket.SendTimeout == 0)
                     {
-                        var s = new SocketException(10057);
-                        throw PythonExceptions.CreateThrowable(error(_context), 10057, s.Message);
+                        var s = new SocketException((int)SocketError.NotConnected);
+                        throw PythonExceptions.CreateThrowable(error(_context), (int)SocketError.NotConnected, s.Message);
                     }
                     else
                         throw MakeException(_context, e);
@@ -550,6 +550,11 @@ namespace IronPython.Modules {
             }
 
 
+            public int recv_into(Object buffer, [DefaultParameterValue(0)]int nbytes, [DefaultParameterValue(0)]int flags){
+                throw PythonOps.TypeError(string.Format("recv_into() argument 1 must be read-write buffer, not {0}",PythonOps.GetPythonTypeName(buffer)));
+            }
+
+            
             [Documentation("recvfrom(bufsize[, flags]) -> (string, address)\n\n"
                 + "Receive data from the socket, up to bufsize bytes. string is the data\n"
                 + "received, and address (whose format is protocol-dependent) is the address of\n"
@@ -568,8 +573,8 @@ namespace IronPython.Modules {
                     bytesRead = _socket.ReceiveFrom(buffer, (SocketFlags)flags, ref remoteEP);
                 } catch (Exception e) {
                     if (_socket.SendTimeout == 0){
-                        var s = new SocketException(10022);
-                        throw PythonExceptions.CreateThrowable(error(_context), 10022, s.Message);
+                        var s = new SocketException((int)SocketError.InvalidArgument);
+                        throw PythonExceptions.CreateThrowable(error(_context), (int)SocketError.InvalidArgument, s.Message);
                     }
                     else
                         throw MakeException(_context, e);
@@ -611,8 +616,8 @@ namespace IronPython.Modules {
                     bytesRead = _socket.ReceiveFrom(byteBuffer, (SocketFlags)flags, ref remoteEP);
                 } catch (Exception e) {
                     if (_socket.SendTimeout == 0){
-                        var s = new SocketException(10022);
-                        throw PythonExceptions.CreateThrowable(error(_context), 10022, s.Message);
+                        var s = new SocketException((int)SocketError.InvalidArgument);
+                        throw PythonExceptions.CreateThrowable(error(_context), (int)SocketError.InvalidArgument, s.Message);
                     }
                     else
                         throw MakeException(_context, e);
@@ -634,24 +639,20 @@ namespace IronPython.Modules {
                 IPEndPoint remoteIPEP = new IPEndPoint(IPAddress.Any, 0);
                 EndPoint remoteEP = remoteIPEP;
 
-                try
-                {
+                try {
                     bytesRead = _socket.ReceiveFrom(byteBuffer, (SocketFlags)flags, ref remoteEP);
                 }
-                catch (Exception e)
-                {
-                    if (_socket.SendTimeout == 0)
-                    {
-                        var s = new SocketException(10022);
-                        throw PythonExceptions.CreateThrowable(error(_context), 10022, s.Message);
+                catch (Exception e) {
+                    if (_socket.SendTimeout == 0) {
+                        var s = new SocketException((int)SocketError.InvalidArgument);
+                        throw PythonExceptions.CreateThrowable(error(_context), (int)SocketError.InvalidArgument, s.Message);
                     }
                     else
                         throw MakeException(_context, e);
 
                 }
 
-                for (int i = 0; i < byteBuffer.Length; i++)
-                {
+                for (int i = 0; i < byteBuffer.Length; i++){
                     buffer[i] = byteBuffer[i];
                 }
                 PythonTuple remoteAddress = EndPointToTuple((IPEndPoint)remoteEP);
@@ -671,8 +672,8 @@ namespace IronPython.Modules {
                     bytesRead = _socket.ReceiveFrom(byteBuffer, (SocketFlags)flags, ref remoteEP);
                 } catch (Exception e) {
                     if (_socket.SendTimeout == 0){
-                        var s = new SocketException(10022);
-                        throw PythonExceptions.CreateThrowable(error(_context), 10022, s.Message);
+                        var s = new SocketException((int)SocketError.InvalidArgument);
+                        throw PythonExceptions.CreateThrowable(error(_context), (int)SocketError.InvalidArgument, s.Message);
                     }
                     else
                         throw MakeException(_context, e);
@@ -684,6 +685,10 @@ namespace IronPython.Modules {
                 }
                 PythonTuple remoteAddress = EndPointToTuple((IPEndPoint)remoteEP);
                 return PythonTuple.MakeTuple(bytesRead, remoteAddress);
+            }
+
+            public PythonTuple recvfrom_into(Object buffer, [DefaultParameterValue(0)]int nbytes, [DefaultParameterValue(0)]int flags) {
+                throw PythonOps.TypeError(string.Format("recvfrom_into() argument 1 must be read-write buffer, not {0}", PythonOps.GetPythonTypeName(buffer)));
             }
 
             private static int byteBufferSize(string funcName, int nbytes, int bufLength, int itemSize) {
@@ -2697,33 +2702,27 @@ namespace IronPython.Modules {
     }
 
 
-    internal class SocketUtilException : Exception
-    {
+    internal class SocketUtilException : Exception {
 
-        public SocketUtilException()
-        {
+        public SocketUtilException() {
         }
 
         public SocketUtilException(string message)
-            : base(message)
-        {
+            : base(message) {
         }
 
         public SocketUtilException(string message, Exception inner)
-            : base(message, inner)
-        {
+            : base(message, inner) {
         }
 
     }
 
     // based on http://stackoverflow.com/questions/13246099/using-c-sharp-to-reference-a-port-number-to-service-name
     // for the Linux Mono version and http://www.pinvoke.net/ for dllimports for winsock libraries
-    internal static class SocketUtil
-    {
+    internal static class SocketUtil {
 
         [StructLayoutAttribute(LayoutKind.Sequential)]
-        public struct servent
-        {
+        public struct servent {
             public string s_name;
             public IntPtr s_aliases;
             public ushort s_port;
@@ -2731,8 +2730,7 @@ namespace IronPython.Modules {
         }
 
         [StructLayout(LayoutKind.Sequential)]
-        internal struct WSAData
-        {
+        internal struct WSAData {
             public short wVersion;
             public short wHighVersion;
             [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 257)]
@@ -2751,7 +2749,7 @@ namespace IronPython.Modules {
         private static extern IntPtr getservbyport_linux(ushort port, string proto);
 
 
-        [DllImport("ws2_32.dll", SetLastError=true)]
+        [DllImport("ws2_32.dll", SetLastError = true)]
         static extern Int32 WSAStartup(Int16 wVersionRequested, out WSAData wsaData);
         [DllImport("ws2_32.dll", SetLastError = true, CharSet = CharSet.Auto)]
         private static extern IntPtr getservbyname(string name, string proto);
@@ -2762,8 +2760,7 @@ namespace IronPython.Modules {
         [DllImport("ws2_32.dll", CharSet = CharSet.Auto, SetLastError = true)]
         static extern Int32 WSACleanup();
 
-        public static string GetServiceByPortWindows(ushort port, string protocol)
-        {
+        public static string GetServiceByPortWindows(ushort port, string protocol) {
             WSAData dummy = new WSAData();
             int successful = WSAStartup(0x0202, out dummy);
             if (successful != 0)
@@ -2778,18 +2775,16 @@ namespace IronPython.Modules {
                 var srvent = (servent)Marshal.PtrToStructure(result, typeof(servent));
                 return srvent.s_name;
             }
-            finally{
+            finally {
                 // make sure I clean up don't have to worry about Winsock clean and keeping state
                 WSACleanup();
             }
         }
 
-        public static string GetServiceByPortNonWindows(ushort port, string protocol)
-        {
+        public static string GetServiceByPortNonWindows(ushort port, string protocol) {
             var netport = unchecked((ushort)IPAddress.HostToNetworkOrder(unchecked((short)port)));
             var result = getservbyport(netport, protocol);
-            if (IntPtr.Zero == result)
-            {
+            if (IntPtr.Zero == result) {
                 throw new SocketUtilException(
                     string.Format("Could not resolve service for port {0}", port));
             }
@@ -2797,25 +2792,24 @@ namespace IronPython.Modules {
             return srvent.s_name;
         }
 
-        public static string GetServiceByPort(ushort port, string protocol)
-        {
-              if (Environment.OSVersion.Platform == PlatformID.Unix ||Environment.OSVersion.Platform == PlatformID.MacOSX)
-                return GetServiceByPortNonWindows(port,protocol);
-              else
+        public static string GetServiceByPort(ushort port, string protocol) {
+            if (Environment.OSVersion.Platform == PlatformID.Unix || Environment.OSVersion.Platform == PlatformID.MacOSX)
+                return GetServiceByPortNonWindows(port, protocol);
+            else
                 return GetServiceByPortWindows(port, protocol);
         }
 
 
-        public static ushort GetServiceByNameWindows(string service, string protocol){
+        public static ushort GetServiceByNameWindows(string service, string protocol) {
 
             // Startup with version 2.2 the latest Winsock library
             WSAData dummy = new WSAData();
             int successful = WSAStartup(0x0202, out dummy);
-            if (successful != 0){
+            if (successful != 0) {
                 throw new SocketUtilException(
                     string.Format("Could not resolve port for service {0}", service));
             }
-            try{
+            try {
 
                 var result = getservbyname(service, protocol);
                 if (IntPtr.Zero == result)
@@ -2832,12 +2826,10 @@ namespace IronPython.Modules {
 
         }
 
-        public static ushort GetServiceByNameNonWindows(string service, string protocol)
-        {
+        public static ushort GetServiceByNameNonWindows(string service, string protocol) {
 
             var result = getservbyname(service, protocol);
-            if (IntPtr.Zero == result)
-            {
+            if (IntPtr.Zero == result) {
                 throw new SocketUtilException(
                     string.Format("Could not resolve port for service {0}", service));
             }
@@ -2847,8 +2839,7 @@ namespace IronPython.Modules {
             return unchecked((ushort)hostport);
 
         }
-        public static ushort GetServiceByName(string service, string protocol)
-        {
+        public static ushort GetServiceByName(string service, string protocol) {
             if (Environment.OSVersion.Platform == PlatformID.Unix || Environment.OSVersion.Platform == PlatformID.MacOSX)
                 return GetServiceByNameNonWindows(service, protocol);
             else
