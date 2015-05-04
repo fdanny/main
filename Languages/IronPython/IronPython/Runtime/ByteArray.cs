@@ -139,7 +139,7 @@ namespace IronPython.Runtime {
         public int pop() {
             lock (this) {
                 if (Count == 0) {
-                    throw PythonOps.OverflowError("pop off of empty bytearray");
+                    throw PythonOps.IndexError("pop off of empty bytearray");
                 }
 
                 int res = _bytes[_bytes.Count - 1];
@@ -151,7 +151,7 @@ namespace IronPython.Runtime {
         public int pop(int index) {
             lock (this) {
                 if (Count == 0) {
-                    throw PythonOps.OverflowError("pop off of empty bytearray");
+                    throw PythonOps.IndexError("pop off of empty bytearray");
                 }
 
                 index = PythonOps.FixIndex(index, Count);
@@ -263,7 +263,7 @@ namespace IronPython.Runtime {
             }
         }
         
-        public string decode(CodeContext/*!*/ context, [Optional]string encoding, [DefaultParameterValue("strict")]string errors) {
+        public string decode(CodeContext/*!*/ context, [Optional]object encoding, [DefaultParameterValue("strict")]string errors) {
             return StringOps.decode(context, _bytes.MakeString(), encoding, errors);
         }
 
@@ -1274,8 +1274,14 @@ namespace IronPython.Runtime {
                 return (IList<byte>)value;
             }
 
-            if (value is string || value is Extensible<string>) {
-                throw PythonOps.TypeError("unicode argument without an encoding");
+            var strValue = value as string;
+            if (strValue != null) {
+                return strValue.MakeByteArray();
+            }
+
+            var esValue = value as Extensible<string>;
+            if (esValue != null) {
+                return esValue.Value.MakeByteArray();
             }
 
             List<byte> ret = new List<byte>();

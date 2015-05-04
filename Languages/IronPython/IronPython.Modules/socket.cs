@@ -505,6 +505,7 @@ namespace IronPython.Modules {
                 + "is not specified (or 0), receive up to the size available in the given buffer.\n\n"
                 + "See recv() for documentation about the flags.\n"
                 )]
+<<<<<<< HEAD
             public int recv_into(MemoryView buffer, [DefaultParameterValue(0)]int nbytes, [DefaultParameterValue(0)]int flags){
                 int bytesRead;
                 byte[] byteBuffer = buffer.tobytes().ToByteArray();
@@ -516,11 +517,22 @@ namespace IronPython.Modules {
                 {
                     if (_socket.SendTimeout == 0)
                     {
+=======
+            public int recv_into(MemoryView buffer, [DefaultParameterValue(0)]int nbytes, [DefaultParameterValue(0)]int flags) {
+                int bytesRead;
+                byte[] byteBuffer = buffer.tobytes().ToByteArray();
+                try {
+                    bytesRead = _socket.Receive(byteBuffer, (SocketFlags)flags);
+                }
+                catch (Exception e) {
+                    if (_socket.SendTimeout == 0) {
+>>>>>>> bytearray_updates
                         var s = new SocketException((int)SocketError.NotConnected);
                         throw PythonExceptions.CreateThrowable(error(_context), (int)SocketError.NotConnected, s.Message);
                     }
                     else
                         throw MakeException(_context, e);
+<<<<<<< HEAD
 
                 }
 
@@ -528,6 +540,12 @@ namespace IronPython.Modules {
                 {
                     buffer[i] = byteBuffer[i];
                 }
+=======
+
+                }
+
+                buffer[new Slice(0, bytesRead)] = byteBuffer.Slice(new Slice(0, bytesRead));
+>>>>>>> bytearray_updates
                 return bytesRead;
 
             }
@@ -617,9 +635,13 @@ namespace IronPython.Modules {
                     throw MakeRecvException(e, SocketError.InvalidArgument);
                 }
 
+<<<<<<< HEAD
                 for (int i = 0; i < byteBuffer.Length; i++){
                     buffer[i] = byteBuffer[i];
                 }
+=======
+                buffer[new Slice(0, bytesRead)] = byteBuffer.Slice(new Slice(0, bytesRead));
+>>>>>>> bytearray_updates
                 PythonTuple remoteAddress = EndPointToTuple((IPEndPoint)remoteEP);
                 return PythonTuple.MakeTuple(bytesRead, remoteAddress);
             }
@@ -710,6 +732,31 @@ namespace IronPython.Modules {
                 + "successful completion of the Send method means that the underlying system has\n"
                 + "had room to buffer your data for a network send"
                 )]
+            public int send(Bytes data, [DefaultParameterValue(0)] int flags) {
+                byte[] buffer = data.GetUnsafeByteArray();
+                try {
+                    return _socket.Send(buffer, (SocketFlags)flags);
+                } catch (Exception e) {
+                    throw MakeException(_context, e);
+                }
+            }
+
+
+            [Documentation("send(string[, flags]) -> bytes_sent\n\n"
+                + "Send data to the remote socket. The socket must be connected to a remote\n"
+                + "socket (by calling either connect() or accept(). Returns the number of bytes\n"
+                + "sent to the remote socket.\n"
+                + "\n"
+                + "Note that the successful completion of a send() call does not mean that all of\n"
+                + "the data was sent. The caller must keep track of the number of bytes sent and\n"
+                + "retry the operation until all of the data has been sent.\n"
+                + "\n"
+                + "Also note that there is no guarantee that the data you send will appear on the\n"
+                + "network immediately. To increase network efficiency, the underlying system may\n"
+                + "delay transmission until a significant amount of outgoing data is collected. A\n"
+                + "successful completion of the Send method means that the underlying system has\n"
+                + "had room to buffer your data for a network send"
+                )]
             public int send(PythonBuffer data, [DefaultParameterValue(0)] int flags) {
                 byte[] buffer = data.byteCache;
                 try {
@@ -740,16 +787,31 @@ namespace IronPython.Modules {
                 + "had room to buffer your data for a network send"
                 )]
             public void sendall(string data, [DefaultParameterValue(0)] int flags) {
-                byte[] buffer = data.MakeByteArray();
-                try {
-                    int bytesTotal = buffer.Length;
-                    int bytesRemaining = bytesTotal;
-                    while (bytesRemaining > 0) {
-                        bytesRemaining -= _socket.Send(buffer, bytesTotal - bytesRemaining, bytesRemaining, (SocketFlags)flags);
-                    }
-                } catch (Exception e) {
-                    throw MakeException(_context, e);
-                }
+                sendallWorker(data.MakeByteArray(), flags);
+            }
+
+            [Documentation("sendall(string[, flags]) -> None\n\n"
+                + "Send data to the remote socket. The socket must be connected to a remote\n"
+                + "socket (by calling either connect() or accept().\n"
+                + "\n"
+                + "Unlike send(), sendall() blocks until all of the data has been sent or until a\n"
+                + "timeout or an error occurs. None is returned on success. If an error occurs,\n"
+                + "there is no way to tell how much data, if any, was sent.\n"
+                + "\n"
+                + "Difference from CPython: timeouts do not function as you would expect. The\n"
+                + "function is implemented using multiple calls to send(), so the timeout timer\n"
+                + "is reset after each of those calls. That means that the upper bound on the\n"
+                + "time that it will take for sendall() to return is the number of bytes in\n"
+                + "string times the timeout interval.\n"
+                + "\n"
+                + "Also note that there is no guarantee that the data you send will appear on the\n"
+                + "network immediately. To increase network efficiency, the underlying system may\n"
+                + "delay transmission until a significant amount of outgoing data is collected. A\n"
+                + "successful completion of the Send method means that the underlying system has\n"
+                + "had room to buffer your data for a network send"
+                )]
+            public void sendall(Bytes data, [DefaultParameterValue(0)] int flags) {
+                sendallWorker(data.GetUnsafeByteArray(), flags);
             }
 
             [Documentation("sendall(string[, flags]) -> None\n\n"
@@ -773,7 +835,10 @@ namespace IronPython.Modules {
                 + "had room to buffer your data for a network send"
                 )]
             public void sendall(PythonBuffer data, [DefaultParameterValue(0)] int flags) {
-                byte[] buffer = data.byteCache;
+                sendallWorker(data.byteCache, flags);
+            }
+
+            private void sendallWorker(byte[] buffer, int flags) {
                 try {
                     int bytesTotal = buffer.Length;
                     int bytesRemaining = bytesTotal;
@@ -812,8 +877,40 @@ namespace IronPython.Modules {
                 }
             }
 
+            [Documentation("sendto(string[, flags], address) -> bytes_sent\n\n"
+                + "Send data to the remote socket. The socket does not need to be connected to a\n"
+                + "remote socket since the address is specified in the call to sendto(). Returns\n"
+                + "the number of bytes sent to the remote socket.\n"
+                + "\n"
+                + "Blocking sockets will block until the all of the bytes in the buffer are sent.\n"
+                + "Since a nonblocking Socket completes immediately, it might not send all of the\n"
+                + "bytes in the buffer. It is your application's responsibility to keep track of\n"
+                + "the number of bytes sent and to retry the operation until the application sends\n"
+                + "all of the bytes in the buffer.\n"
+                + "\n"
+                + "Note that there is no guarantee that the data you send will appear on the\n"
+                + "network immediately. To increase network efficiency, the underlying system may\n"
+                + "delay transmission until a significant amount of outgoing data is collected. A\n"
+                + "successful completion of the Send method means that the underlying system has\n"
+                + "had room to buffer your data for a network send"
+                )]
+            public int sendto(Bytes data, int flags, PythonTuple address) {
+                byte[] buffer = data.GetUnsafeByteArray();
+                EndPoint remoteEP = TupleToEndPoint(_context, address, _socket.AddressFamily, out _hostName);
+                try {
+                    return _socket.SendTo(buffer, (SocketFlags)flags, remoteEP);
+                } catch (Exception e) {
+                    throw MakeException(_context, e);
+                }
+            }
+
             [Documentation("")]
             public int sendto(string data, PythonTuple address) {
+                return sendto(data, 0, address);
+            }
+
+            [Documentation("")]
+            public int sendto(Bytes data, PythonTuple address) {
                 return sendto(data, 0, address);
             }
 
@@ -1103,13 +1200,14 @@ namespace IronPython.Modules {
         }
 
         public static socket create_connection(CodeContext/*!*/ context, PythonTuple address, object timeout, PythonTuple source_address) {
-            string msg = "getaddrinfo returns an empty list";
             string host = Converter.ConvertToString(address[0]);
             object port = address[1];
-
-            IEnumerator en = getaddrinfo(context, host, port, 0, SOCK_STREAM, (int)ProtocolType.IP, (int)SocketFlags.None).GetEnumerator();
-            while (en.MoveNext()) {
-                PythonTuple current = (PythonTuple)en.Current;
+            Exception lastException = null;
+            var addrInfos = getaddrinfo(context, host, port, 0, SOCK_STREAM, (int)ProtocolType.IP, (int)SocketFlags.None);
+            if (addrInfos.Count == 0) {
+                throw PythonExceptions.CreateThrowableForRaise(context, error(context), "getaddrinfo returns an empty list");
+            }
+            foreach (PythonTuple current in addrInfos) {
                 int family = Converter.ConvertToInt32(current[0]);
                 int socktype = Converter.ConvertToInt32(current[1]);
                 int proto = Converter.ConvertToInt32(current[2]);
@@ -1131,17 +1229,13 @@ namespace IronPython.Modules {
                     socket.connect(sockaddress);
                     return socket;
                 } catch (Exception ex) {
-                    if (PythonOps.CheckException(context, ex, error(context)) == null) {
-                        continue;
-                    }
+                    lastException = ex;
                     if (socket != null) {
                         socket.close();
                     }
-                    msg = ex.Message;
                 }
             }
-
-            throw PythonExceptions.CreateThrowableForRaise(context, error(context), msg);
+            throw lastException;
         }
 
         [Documentation("")]
@@ -1488,7 +1582,11 @@ namespace IronPython.Modules {
 
             // try the pinvoke call if it fails fall back to hard coded swtich statement
             try {
+<<<<<<< HEAD
                 var port = SocketUtil.GetServiceByName(serviceName, protocolName);
+=======
+                return SocketUtil.GetServiceByName(serviceName, protocolName);
+>>>>>>> bytearray_updates
             }
             catch{}
             
@@ -1832,6 +1930,9 @@ namespace IronPython.Modules {
         public const int IPV6_MULTICAST_LOOP = (int)SocketOptionName.MulticastLoopback;
         public const int IPV6_PKTINFO = (int)SocketOptionName.PacketInformation;
         public const int IPV6_UNICAST_HOPS = (int)SocketOptionName.IpTimeToLive;
+#if FEATURE_IPV6
+        public const int IPV6_V6ONLY = (int) SocketOptionName.IPv6Only;
+#endif
         public const int IP_ADD_MEMBERSHIP = (int)SocketOptionName.AddMembership;
         public const int IP_DROP_MEMBERSHIP = (int)SocketOptionName.DropMembership;
         public const int IP_HDRINCL = (int)SocketOptionName.HeaderIncluded;
@@ -2171,7 +2272,12 @@ namespace IronPython.Modules {
                 get { return true; }
             }
 
-            public override void Close() { Dispose(false); }
+            public override void Close() {
+                object closeObj;
+                if(PythonOps.TryGetBoundAttr(_userSocket,"close",out closeObj))
+                    PythonCalls.Call(closeObj);
+                Dispose(false); 
+            }
 
             public override void Flush() {
                 if (_data.Count > 0) {
@@ -2246,10 +2352,14 @@ namespace IronPython.Modules {
                     _socket = s;
                     stream = new NetworkStream(s._socket, false);
                 } else {
+                    _socket = null;
                     stream = new PythonUserSocketStream(socket, GetBufferSize(context, bufsize), close);
                 }
-                _isOpen = true;
+               
                 base.__init__(stream, System.Text.Encoding.Default, mode);
+
+                _isOpen = socket != null;
+                _close = (socket == null) ? false : close;
             }
 
             public void __init__(params object[] args) {
@@ -2275,7 +2385,12 @@ namespace IronPython.Modules {
 
             public override object close() {
                 if (!_isOpen) return null;
-                if (_socket != null && _close) _socket.close();
+                if (_socket != null && _close) {
+                    _socket.close();
+                }
+                else if (this._stream != null && _close) {
+                    _stream.Close();
+                }
                 _isOpen = false;
                 var obj = base.close();
                 return obj;
@@ -2552,7 +2667,7 @@ namespace IronPython.Modules {
                     case PythonSsl.PROTOCOL_SSLv2: return SslProtocols.Ssl2;
                     case -1:
                     case PythonSsl.PROTOCOL_SSLv3: return SslProtocols.Ssl3;
-                    case PythonSsl.PROTOCOL_SSLv23: return SslProtocols.Ssl3 | SslProtocols.Ssl2;
+                    case PythonSsl.PROTOCOL_SSLv23: return SslProtocols.Ssl3 | SslProtocols.Ssl2 | SslProtocols.Tls;
                     case PythonSsl.PROTOCOL_TLSv1: return SslProtocols.Tls;
                     default:
                         throw new InvalidOperationException("bad ssl protocol type: " + type);
@@ -2719,7 +2834,11 @@ namespace IronPython.Modules {
 
         [DllImport("ws2_32.dll", SetLastError = true)]
         static extern Int32 WSAStartup(Int16 wVersionRequested, out WSAData wsaData);
+<<<<<<< HEAD
         [DllImport("ws2_32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+=======
+        [DllImport("ws2_32.dll", SetLastError = true, CharSet = CharSet.Ansi)]
+>>>>>>> bytearray_updates
         private static extern IntPtr getservbyname(string name, string proto);
         [DllImport("ws2_32.dll", SetLastError = true, CharSet = CharSet.Auto)]
         private static extern IntPtr getservbyport(ushort port, string proto);
@@ -2729,6 +2848,7 @@ namespace IronPython.Modules {
         static extern Int32 WSACleanup();
 
         public static string GetServiceByPortWindows(ushort port, string protocol) {
+<<<<<<< HEAD
             WSAData dummy = new WSAData();
             int successful = WSAStartup(0x0202, out dummy);
             if (successful != 0)
@@ -2747,6 +2867,18 @@ namespace IronPython.Modules {
                 // make sure I clean up don't have to worry about Winsock clean and keeping state
                 WSACleanup();
             }
+=======
+
+            var test = Socket.OSSupportsIPv6; // make sure Winsock library is initiliazed
+            
+            var netport = unchecked((ushort)IPAddress.HostToNetworkOrder(unchecked((short)port)));
+            var result = getservbyport(netport, protocol);
+            if (IntPtr.Zero == result)
+                throw new SocketUtilException(string.Format("Could not resolve service for port {0}", port));
+
+            var srvent = (servent)Marshal.PtrToStructure(result, typeof(servent));
+            return srvent.s_name;
+>>>>>>> bytearray_updates
         }
 
         public static string GetServiceByPortNonWindows(ushort port, string protocol) {
@@ -2770,6 +2902,7 @@ namespace IronPython.Modules {
 
         public static ushort GetServiceByNameWindows(string service, string protocol) {
 
+<<<<<<< HEAD
             // Startup with version 2.2 the latest Winsock library
             WSAData dummy = new WSAData();
             int successful = WSAStartup(0x0202, out dummy);
@@ -2791,6 +2924,17 @@ namespace IronPython.Modules {
                 // make sure I clean up don't have to worry about Winsock clean and keeping state
                 WSACleanup();
             }
+=======
+            var test = Socket.OSSupportsIPv6; // make sure Winsock library is initiliazed
+
+            var result = getservbyname(service, protocol);
+            if (IntPtr.Zero == result)
+                throw new SocketUtilException(string.Format("Could not resolve port for service {0}", service));
+
+            var srvent = (servent)Marshal.PtrToStructure(result, typeof(servent));
+            var hostport = IPAddress.NetworkToHostOrder(unchecked((short)srvent.s_port));
+            return unchecked((ushort)hostport);
+>>>>>>> bytearray_updates
 
         }
 

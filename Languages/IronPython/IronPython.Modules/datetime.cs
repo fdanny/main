@@ -433,6 +433,10 @@ namespace IronPython.Modules {
                 set { _dateTime = value; }
             }
 
+            public static implicit operator DateTime(date self) {
+                return self._dateTime;
+            }
+
             // supported operations
             public static date operator +([NotNull]date self, [NotNull]timedelta other) {
                 try {
@@ -704,6 +708,8 @@ namespace IronPython.Modules {
 
             private UnifiedDateTime _utcDateTime;
 
+            private const long TicksPerMicrosecond = TimeSpan.TicksPerMillisecond/1000;
+
             public datetime(int year,
                 int month,
                 int day,
@@ -757,7 +763,11 @@ namespace IronPython.Modules {
             }
 
             public datetime(DateTime dt)
-                : this(dt, 0, null) {
+                : this(dt, null) {
+            }
+
+            public datetime(DateTime dt, tzinfo tzinfo)
+                : this(dt, (int)((dt.Ticks / TicksPerMicrosecond) % 1000), tzinfo) {
             }
 
             // just present to match CPython's error messages...
@@ -809,10 +819,6 @@ namespace IronPython.Modules {
             }
 
             // other constructors, all class methods:
-            public new static object today() {
-                return new datetime(DateTime.Now, 0, null);
-            }
-
             public static object now([DefaultParameterValue(null)]tzinfo tz) {
                 if (tz != null) {
                     return tz.fromutc(new datetime(DateTime.UtcNow, 0, tz));
@@ -825,16 +831,21 @@ namespace IronPython.Modules {
                 return new datetime(DateTime.UtcNow, 0, null);
             }
 
+            
+            public new static object today() {
+                return new datetime(DateTime.Now, 0, null);
+            }           
+
             public static object fromtimestamp(double timestamp, [DefaultParameterValue(null)] tzinfo tz) {
                 DateTime dt = PythonTime.TimestampToDateTime(timestamp);
                 dt = dt.AddSeconds(-PythonTime.timezone);
 
                 if (tz != null) {
                     dt = dt.ToUniversalTime();
-                    datetime pdtc = new datetime(dt, 0, tz);
+                    datetime pdtc = new datetime(dt, tz);
                     return tz.fromutc(pdtc);
                 } else {
-                    return new datetime(dt, 0, null);
+                    return new datetime(dt);
                 }
             }
 
@@ -1147,6 +1158,7 @@ namespace IronPython.Modules {
 
             public override string/*!*/ __repr__(CodeContext/*!*/ context) {
                 StringBuilder sb = new StringBuilder();
+                // TODO: need to determine how to get the actual class name if a derived type (CP21478)
                 sb.AppendFormat("datetime.datetime({0}, {1}, {2}, {3}, {4}",
                     InternalDateTime.Year,
                     InternalDateTime.Month,

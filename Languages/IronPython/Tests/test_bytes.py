@@ -372,8 +372,8 @@ def test_partition():
 
 def test_pop():
     b = bytearray()
-    AssertError(OverflowError, b.pop)
-    AssertError(OverflowError, b.pop, 0)
+    AssertError(IndexError, b.pop)
+    AssertError(IndexError, b.pop, 0)
     
     b = bytearray(b'abc')
     AreEqual(b.pop(), ord('c'))
@@ -876,7 +876,7 @@ def test_encode_decode():
     for testType in types:
         AreEqual(testType(b'abc').decode(), u'abc')
 
-def test_encode_decode():
+def test_encode_decode_error():
     for testType in types:
         AssertError(TypeError, testType(b'abc').decode, None)
           
@@ -1450,5 +1450,8 @@ def test_bytes_hashing():
         #For now just make sure this doesn't throw
         temp = hashLib(bytearray(b'abc'))
         x.update(bytearray(b'abc'))
+
+def test_cp35493():
+    AreEqual(bytearray(u'\xde\xad\xbe\xef\x80'), bytearray(b'\xde\xad\xbe\xef\x80'))
 
 run_test(__name__)
